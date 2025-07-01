@@ -33,10 +33,8 @@ RUN useradd --create-home --shell /bin/bash appuser \
 WORKDIR /app
 COPY conda.yaml robot.yaml ./
 
-# 6) Initialize holotree variables
-RUN rcc holotree vars
-
-# 7) Drop to non-root
+# 6) Drop to non-root and initialize holotree
 USER appuser
+RUN rcc holotree vars
 
 # default workdir remains /app
