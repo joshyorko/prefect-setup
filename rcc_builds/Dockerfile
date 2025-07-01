@@ -1,68 +1,42 @@
-FROM prefecthq/prefect:3.2.9-python3.12 AS builder
-
-# Install system dependencies and Docker CLI
-RUN apt-get update && apt-get install -y \
-    docker.io \
-    libgdk-pixbuf2.0-0 \
-    libgtk-3-0 \
-    libasound2 \
-    libdbus-glib-1-2 \
-    libxtst6 \
-    xvfb \
-    wget \
-    # Playwright browser dependencies
-    libglib2.0-0 \
-    libnspr4 \
-    libnss3 \
-    libdbus-1-3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libatspi2.0-0 \
-    libx11-6 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libxcb1 \
-    libxkbcommon0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
-RUN pip install --no-cache-dir prefect-docker playwright
-
-# Install Playwright browsers
-RUN playwright install
-
-# Install RCC
-RUN wget https://downloads.robocorp.com/rcc/releases/v18.5.0/linux64/rcc \
-    && install rcc /usr/local/bin/rcc \
-    && rm rcc
-
-# --- Final image ---
+# Use Prefect’s Python 3.12 image
 FROM prefecthq/prefect:3.2.9-python3.12
 
-# Copy installed tools and dependencies from builder
-COPY --from=builder /usr/local/bin/rcc /usr/local/bin/rcc
-COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
+# Switch to root to install system packages
+USER root
 
-# Set holotree environment variables
-ENV HOLOTREE_SHARED_HOME=/opt/robocorp/holotree \
-    HOLOTREE_HOME=/opt/robocorp/holotree \
-    RCC_HOLOTREE_SHARED_HOME=/opt/robocorp/holotree \
-    RCC_HOLOTREE_HOME=/opt/robocorp/holotree
+# 1) Install Node.js (v18) and basic tools
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       curl \
+       gnupg \
+       ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash appuser && \
-    mkdir -p /app && chown appuser:appuser /app
+# 2) Install Playwright, OS deps and browsers
+RUN npm install -g playwright \
+    && npx playwright install-deps \
+    && npx playwright install --with-deps
 
-# Copy environment files (adjust path as needed)
-COPY conda.yaml /app/conda.yaml
-COPY robot.yaml /app/robot.yaml
+# 3) Install RCC (Robocorp Command Center)
+RUN curl -o /usr/local/bin/rcc https://downloads.robocorp.com/rcc/releases/v18.5.0/linux64/rcc \
+    && chmod +x /usr/local/bin/rcc
 
-USER appuser
+# 4) Create non-root user and app directory
+RUN useradd --create-home --shell /bin/bash appuser \
+    && mkdir /app \
+    && chown appuser:appuser /app
+
+# 5) Copy your Robocorp environment files
 WORKDIR /app
+COPY conda.yaml robot.yaml ./
 
+# 6) Initialize holotree variables
 RUN rcc holotree vars
 
+# 7) Drop to non-root
+USER appuser
+
+# default workdir remains /app
