@@ -7,29 +7,30 @@ from prefect import flow
 
 if __name__ == "__main__":
     source = GitRepository(
-        url="https://github.com/mygainwell/bps-rpa-automations.git",
+        url="https://github.com/joshyorko/cook-with-gas-rpa-challenge.git",
         branch="main",
         credentials=GitHubCredentials.load("josh-pat")
     )
     docker_image = DockerImage(
-        name="ghcr.io/mygainwell/awesome-sauce",
+        name="ghcr.io/joshyorko/cookie-with-gas-prefect-rcc",
         tag="latest",
-        dockerfile="DockerFiles/Dockerfile"
+        dockerfile="rcc_builds/Dockerfile"
     )
-    schedule = IntervalSchedule(interval=timedelta(minutes=10))
+    schedule = IntervalSchedule(interval=timedelta(hours=1))
 
     # Attach the spawned container to the 'app-network' so that "action-server" is resolvable
     flow.from_source(
         source=source,
-        entrypoint="main.py:rpa_billing_report_flow"
+        entrypoint="main.py:rpaservicesflow"
     ).deploy(
-        name="bps-rpa-python-deploy",
+        name="rpaservicesflow-deployment",
         work_pool_name="docker-pool",
         image=docker_image,
         schedule=schedule,
-        push=True,
+        build=False,
+        push=False,
         job_variables={
-            "image_pull_policy": "Never",  # Use the locally available image
-            "networks": ["app-network"]    # Attach to the app-network so "action-server" can be resolved
+            "image_pull_policy": "Always",  # Only pull if not available locally
+            "networks": ["shared-network"]    # Attach to the app-network so "action-server" can be resolved
         }
     )

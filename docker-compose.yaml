@@ -62,8 +62,7 @@ services:
     build:
       context: .   # Use root directory as build context
       dockerfile: prefect-dind.Dockerfile
-      args:
-        ROBOT_PATH: ${ROBOT_PATH}
+
     image: ghcr.io/joshyorko/prefect-agent-docker:latest
     depends_on:
       prefect:
@@ -71,6 +70,7 @@ services:
     container_name: docker-agent
     entrypoint:
       - /app/docker-entrypoint.sh
+    command:
       - prefect
       - worker
       - start
@@ -81,14 +81,11 @@ services:
       - '--type=docker'
     networks:
       - shared-network
+    env_file:
+      - .env
     environment:
-      - 'PREFECT_API_URL=http://prefect:4200/api'  # Connect via the "prefect" hostname
-      - 'PREFECT_API_KEY=${SERVICE_PASSWORD_APIKEY}'
-      - 'DOCKER_POOL_NAME=${DOCKER_POOL_NAME:-docker-pool}'
-      - 'DOCKER_POOL_LIMIT=${DOCKER_POOL_LIMIT:-5}'
-      - 'DOCKER_WORKER_NAME=${DOCKER_WORKER_NAME:-docker-worker}'
-      - 'GITHUB_USERNAME=${GITHUB_USERNAME}'
-      - 'GITHUB_TOKEN=${GITHUB_TOKEN}'
+      - 'PREFECT_API_URL=http://prefect:4200/api'
+
     healthcheck:
       test:
         - CMD-SHELL

@@ -1,5 +1,5 @@
 {
     "python.analysis.extraPaths": [
-        "/home/kdlocpanda/second_brain/Areas/RPA/prefect-setup/DockerFiles/."
+        "/home/kdlocpanda/second_brain/Areas/RPA/prefect-setup/rcc_builds/."
     ]
 }
