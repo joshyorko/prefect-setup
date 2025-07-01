@@ -1,0 +1,146 @@
+services:
+  prefect:
+    image: 'prefecthq/prefect:3-latest'
+    container_name: prefect       # Explicit container name for DNS resolution
+    networks:
+      shared-network:
+        aliases:
+          - prefect             # Ensure "prefect" is resolvable on the network
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      - SERVICE_FQDN_PREFECT_4200
+      - 'PREFECT_API_URL=${SERVICE_FQDN_PREFECT}/api'
+      - 'PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgresql:5432/${POSTGRES_DB:-prefect}'
+      - 'PREFECT_API_KEY=${SERVICE_PASSWORD_APIKEY}'
+      - 'PREFECT_EXPERIMENTAL_WARN=${PREFECT_EXPERIMENTAL_WARN:-false}'
+      - 'PREFECT_EXPERIMENTAL_ENABLE_SCHEDULE_CONCURRENCY=${PREFECT_EXPERIMENTAL_ENABLE_SCHEDULE_CONCURRENCY:-false}'
+      - 'PREFECT_RUNNER_SERVER_ENABLE=${PREFECT_RUNNER_SERVER_ENABLE:-false}'
+      - 'PREFECT_DEFAULT_WORK_POOL_NAME=${DEFAULT_POOL_NAME:-default}'
+    ports:
+      - '4200:4200'
+    command:
+      - prefect
+      - server
+      - start
+      - '--host'
+      - 0.0.0.0
+      - '--port'
+      - '4200'
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - '-c'
+        - "import requests as r; r.get('http://127.0.0.1:4200/api/health').raise_for_status()"
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - /home/kdlocpanda/second_brain/Areas/RPA/prefect-setup:/app/workspaces
+
+  postgresql:
+    image: 'postgres:16-alpine'
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=$SERVICE_USER_POSTGRES
+      - POSTGRES_PASSWORD=$SERVICE_PASSWORD_POSTGRES
+      - 'POSTGRES_DB=${POSTGRES_DB:-prefect}'
+    networks:
+      - shared-network
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U ${SERVICE_USER_POSTGRES:-postgres} -d ${POSTGRES_DB:-prefect}'
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  docker-agent:
+    build:
+      context: .   # Use root directory as build context
+      dockerfile: prefect-dind.Dockerfile
+      args:
+        ROBOT_PATH: ${ROBOT_PATH}
+    image: ghcr.io/joshyorko/prefect-agent-docker:latest
+    depends_on:
+      prefect:
+        condition: service_healthy
+    container_name: docker-agent
+    entrypoint:
+      - /app/docker-entrypoint.sh
+      - prefect
+      - worker
+      - start
+      - '--pool=${DOCKER_POOL_NAME}'
+      - '--with-healthcheck'
+      - '--name=${DOCKER_WORKER_NAME}'
+      - '--limit=${DOCKER_POOL_LIMIT}'
+      - '--type=docker'
+    networks:
+      - shared-network
+    environment:
+      - 'PREFECT_API_URL=http://prefect:4200/api'  # Connect via the "prefect" hostname
+      - 'PREFECT_API_KEY=${SERVICE_PASSWORD_APIKEY}'
+      - 'DOCKER_POOL_NAME=${DOCKER_POOL_NAME:-docker-pool}'
+      - 'DOCKER_POOL_LIMIT=${DOCKER_POOL_LIMIT:-5}'
+      - 'DOCKER_WORKER_NAME=${DOCKER_WORKER_NAME:-docker-worker}'
+      - 'GITHUB_USERNAME=${GITHUB_USERNAME}'
+      - 'GITHUB_TOKEN=${GITHUB_TOKEN}'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pwd
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - /home/kdlocpanda/second_brain/Areas/RPA/prefect-setup:/app/workspaces
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  process-agent:
+    image: 'prefecthq/prefect:3-latest'
+    depends_on:
+      prefect:
+        condition: service_healthy
+    container_name: process-agent
+    entrypoint:
+      - /opt/prefect/entrypoint.sh
+      - prefect
+      - worker
+      - start
+      - '--pool=${PROCESS_POOL_NAME}'
+      - '--with-healthcheck'
+      - '--name=${PROCESS_WORKER_NAME}'
+      - '--limit=${PROCESS_POOL_LIMIT}'
+    networks:
+      - shared-network
+    environment:
+      - 'PREFECT_API_URL=http://prefect:4200/api'
+      - 'PREFECT_API_KEY=${SERVICE_PASSWORD_APIKEY}'
+      - 'PROCESS_POOL_NAME=${PROCESS_POOL_NAME:-process-pool}'
+      - 'PROCESS_POOL_LIMIT=${PROCESS_POOL_LIMIT:-3}'
+      - 'PROCESS_WORKER_NAME=${PROCESS_WORKER_NAME:-process-worker}'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pwd
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - /home/kdlocpanda/second_brain/Areas/RPA/prefect-setup:/app/workspaces
+
+
+
+volumes:
+  pg-data:
+    driver: local
+
+networks:
+  shared-network:
+    external: true
+
+

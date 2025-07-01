@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "/home/kdlocpanda/second_brain/Areas/RPA/prefect-setup/DockerFiles/."
+    ]
+}
